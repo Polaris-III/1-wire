@@ -1,14 +1,16 @@
 
-module master(output reg en, inout port, input clk, reset, output reg [31:0] mem, output reg init, output reg [9:0] cnt, output reg cycl, output reg rcvd);
+module master(output reg en, inout port, input clk, reset, output reg [7:0] mem, output reg init, output reg [9:0] cnt, output reg cycl, output reg rcvd, output reg idata);
     //output reg [9:0] cnt = 0;// Time counter
     //reg [31:0] mem = 0;      // Registry for received package
     //reg init = 0;            // Init flag(1 when no slave)
     reg [7:0] command;      // Command registry for transfer
+    reg [2:0] bitcnt = 0;   // Bit counter
     reg odata = 1;          // Data bit for transfer 
-    reg idata = 1;          // Data bit for receive
+    //reg idata = 1;          // Data bit for receive
     //reg rcvd = 0;           // Receive flag(1 when bit received)
     //reg cycl = 1;           // Time package flag(1 for pullup)
     reg pres = 1;           // Presence flag(1 when no slave)
+    
     
     assign port = en ? odata : 1'bz;
     
@@ -19,12 +21,14 @@ module master(output reg en, inout port, input clk, reset, output reg [31:0] mem
         init <= 1;
         pres <= 1;
         idata <= 1;
-        cycl = 1;
+        cycl <= 1;
+        bitcnt <= 0;
     end
    
     always@(posedge clk) begin
         cnt <= cnt + 1;
         if (en) begin               // Transmit
+            rcvd <= 0;
             if (cycl) begin         // Space between cycles
                 odata <= 1;
                 if (cnt > 4) begin 
@@ -67,12 +71,12 @@ module master(output reg en, inout port, input clk, reset, output reg [31:0] mem
                 end
             end
             else begin              // Normal mode(Receive data bit)
-                if (cnt > 2) begin
-                    idata <= port;
+                if ((cnt > 2) && ~rcvd) begin
+                    mem[bitcnt] <= port;
+                    bitcnt <= bitcnt + 1;
+                    rcvd <= 1;
                 end
                 if (cnt > 4) begin
-                    mem[0] <= idata;
-                    mem <= mem << 1;
                     en <= 1;
                     cnt <= 0;
                     cycl <= 1;

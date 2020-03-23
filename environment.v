@@ -8,20 +8,21 @@ module env_slave;
     wire master_init;       // Master init flag
     wire cycl;              // Master cycl flag
     wire rcvd;   // Master received flag
+    wire master_idata;
        
     reg reset = 0; // Master will RESET when reset signal rise
     reg clk = 1;
     
     reg [9:0] cnt = 0;                                          // Internal counter
-    reg [31:0] mem = 32'b10101010_11111111_00000000_11001100;   // Data dword for transfer
+    reg [2:0] bitcnt = 0;
+    reg [7:0] mem = 8'b10101010;//_11111111_00000000_11001100;   // Data dword for transfer
     
     reg odata = 1;  // Data for transfer
     reg idata = 0;  // Data for receive
     reg pres = 0;   // Presence flag(1 when master RESET)
-    reg trsm = 0;   // Transmition flag(0 when data bit transfered)
-    
+    reg trsm = 1;   // Transmition flag(0 when data bit transfered)
      
-    master lord(en, port, clk, reset, master_mem, master_init, master_cnt, cycl, rcvd);
+    master lord(en, port, clk, reset, master_mem, master_init, master_cnt, cycl, rcvd, master_idata);
     
     assign port = en ? 1'bz : odata;
     
@@ -29,16 +30,17 @@ module env_slave;
     
     always@(negedge en) begin
         cnt <= 0;
+        trsm <= 1;
+        odata <= 0;
     end
     
     always@(posedge en) begin
         pres <= 0;
-        trsm <= 1;
     end
     
     always@(posedge clk) begin
-        cnt <= cnt + 1;
         if (en) begin               // Receive
+            cnt <= cnt + 1;
             if (cnt > 40) begin     // RESET
                 pres <= 1;
             end
@@ -47,9 +49,9 @@ module env_slave;
             if (pres) begin    // PRESENCE
                 odata <= 0;
             end
-            else begin
-                odata <= mem[0];
-                if (trsm) mem <= mem >> 1;
+            else if(trsm) begin
+                odata <= mem[bitcnt];
+                bitcnt <= bitcnt + 1;
                 trsm <= 0;
             end
         end
