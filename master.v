@@ -10,8 +10,8 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
     //reg rcvd = 0;           // Receive flag(1 when bit received)
     //reg cycl = 1;           // Time package flag(1 for pullup)
     reg pres = 1;           // Presence flag(1 when no slave)
-    
-    
+    reg READ = 0;           // READ command transfered(1 for reading)
+     
     assign port = en ? odata : 1'bz;
     
     always@(posedge reset) begin
@@ -61,7 +61,7 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
                     idata <= port;
                     rcvd <= 1;
                 end
-                if (cnt > 6000) begin
+                if (cnt > 4500) begin
                     if (idata == 0) pres <= 0;
                     else init <= 1;
                     cnt <= 0;
@@ -77,7 +77,7 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
                     bitcnt <= bitcnt + 1;
                     rcvd <= 1;
                 end
-                if (cnt > 4000) begin
+                if (cnt > 4500) begin
                     en <= 1;
                     cnt <= 0;
                     cycl <= 1;
