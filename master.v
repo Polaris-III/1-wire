@@ -1,5 +1,5 @@
 
-module master(output reg en, inout port, input clk, reset, output reg [7:0] mem, output reg init, output reg [9:0] cnt, output reg cycl, output reg rcvd, output reg idata);
+module master(output reg en, inout port, input clk, reset, output reg [7:0] mem, output reg init, output reg [31:0] cnt, output reg cycl, output reg rcvd, output reg idata);
     //output reg [9:0] cnt = 0;// Time counter
     //reg [31:0] mem = 0;      // Registry for received package
     //reg init = 0;            // Init flag(1 when no slave)
@@ -31,7 +31,7 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
             rcvd <= 0;
             if (cycl) begin         // Space between cycles
                 odata <= 1;
-                if (cnt > 4) begin 
+                if (cnt > 2000) begin 
                     cycl <= 0;
                     odata <= 0;
                     cnt <= 0;
@@ -39,7 +39,7 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
             end
             else if (init) begin     // RESET
                 odata <= 0;
-                if (cnt > 48) begin
+                if (cnt > 48000) begin
                     cnt <= 0;
                     cycl <= 1;
                     init <= 0;
@@ -47,7 +47,8 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
                 end
             end
             else begin              // Normal mode(Receive data bit)
-                if (cnt > 2) begin
+                if (cnt > 1500) begin
+                    odata <= 1;
                     en <= 0;
                     cnt <= 0;
                 end
@@ -56,11 +57,11 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
         end 
         else begin                  // Receive
             if (pres) begin         // PRESENCE after RESET
-                if ((cnt > 4) && ~rcvd) begin
+                if ((cnt > 4000) && ~rcvd) begin
                     idata <= port;
                     rcvd <= 1;
                 end
-                if (cnt > 6) begin
+                if (cnt > 6000) begin
                     if (idata == 0) pres <= 0;
                     else init <= 1;
                     cnt <= 0;
@@ -71,12 +72,12 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
                 end
             end
             else begin              // Normal mode(Receive data bit)
-                if ((cnt > 2) && ~rcvd) begin
+                if ((cnt > 1500) && ~rcvd) begin
                     mem[bitcnt] <= port;
                     bitcnt <= bitcnt + 1;
                     rcvd <= 1;
                 end
-                if (cnt > 4) begin
+                if (cnt > 4000) begin
                     en <= 1;
                     cnt <= 0;
                     cycl <= 1;

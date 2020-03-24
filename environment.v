@@ -4,7 +4,7 @@ module env_slave;
     wire port;  
     
     wire [7:0] master_mem;  // Master registry for received package
-    wire [9:0] master_cnt;  // Master counter
+    wire [31:0] master_cnt; // Master counter
     wire master_init;       // Master init flag
     wire cycl;              // Master cycl flag
     wire rcvd;   // Master received flag
@@ -13,7 +13,7 @@ module env_slave;
     reg reset = 0; // Master will RESET when reset signal rise
     reg clk = 1;
     
-    reg [9:0] cnt = 0;                                          // Internal counter
+    reg [31:0] cnt = 0;                                          // Internal counter
     reg [2:0] bitcnt = 0;
     reg [7:0] mem = 8'b10101010;//_11111111_00000000_11001100;   // Data dword for transfer
     
@@ -31,7 +31,7 @@ module env_slave;
     always@(negedge en) begin
         cnt <= 0;
         trsm <= 1;
-        odata <= 0;
+        //odata <= 0;
     end
     
     always@(posedge en) begin
@@ -41,7 +41,7 @@ module env_slave;
     always@(posedge clk) begin
         if (en) begin               // Receive
             cnt <= cnt + 1;
-            if (cnt > 40) begin     // RESET
+            if (cnt > 40000) begin     // RESET
                 pres <= 1;
             end
         end
