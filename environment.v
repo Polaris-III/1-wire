@@ -67,6 +67,7 @@ module env_slave;
                 end
             end
             else begin
+                pres <= 0;
                 en_slv <= 1;
                 trsm <= 1;
                 cnt <= 0;
