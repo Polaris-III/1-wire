@@ -3,7 +3,7 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
     //output reg [9:0] cnt = 0;// Time counter
     //reg [31:0] mem = 0;      // Registry for received package
     //reg init = 0;            // Init flag(1 when no slave)
-    reg [7:0] command;      // Command registry for transfer
+    reg [7:0] COMMAND_BYTE;      // Command registry for transfer
     reg [2:0] bitcnt = 0;   // Bit counter
     reg odata = 1;          // Data bit for transfer 
     //reg idata = 1;          // Data bit for receive
@@ -11,6 +11,9 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
     //reg cycl = 1;           // Time package flag(1 for pullup)
     reg pres = 1;           // Presence flag(1 when no slave)
     reg READ = 0;           // READ command transfered(1 for reading)
+    reg COMMAND = 0;        // COMMAND flag(1 for writing)
+    reg trsd = 1;      // Transfered flag()
+    //reg [2:0] COMMAND_BYTE_CNT = 3'b000;
      
     assign port = en ? odata : 1'bz;
     
@@ -22,7 +25,10 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
         pres <= 1;
         idata <= 1;
         cycl <= 1;
+        trsd <= 1;
         bitcnt <= 0;
+        COMMAND <= 0;
+        COMMAND_BYTE <= 8'b00110011;
     end
    
     always@(posedge clk) begin
@@ -33,6 +39,7 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
                 odata <= 1;
                 if (cnt > 2000) begin 
                     cycl <= 0;
+                    trsd <= 1;
                     odata <= 0;
                     cnt <= 0;
                 end
@@ -46,13 +53,27 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
                     odata <= 1;
                 end
             end
-            else begin              // Normal mode(Receive data bit)
-                if (cnt > 1500) begin
-                    odata <= 1;
-                    en <= 0;
+            else begin              // Normal mode(Receive/Transmit data bit)
+                if (cnt > 6000) begin
+                    cycl <= 1;
                     cnt <= 0;
                 end
-                else odata <= 0;
+                else begin 
+                    if (cnt < 1500) odata <= 0;
+                    else if (~COMMAND) begin
+                        odata <= 1;
+                        en <= 0;
+                        cnt <= 0;
+                    end
+                    else begin
+                        if (trsd) begin
+                            odata = COMMAND_BYTE[bitcnt];
+                            bitcnt = bitcnt + 1;
+                            trsd <= 0;
+                            //if (bitcnt == 0) COMMAND = 0;
+                        end
+                    end
+                end
             end
         end 
         else begin                  // Receive
@@ -62,19 +83,23 @@ module master(output reg en, inout port, input clk, reset, output reg [7:0] mem,
                     rcvd <= 1;
                 end
                 if (cnt > 4500) begin
-                    if (idata == 0) pres <= 0;
+                    if (port == 0) begin
+                        pres <= 0;
+                    end
                     else init <= 1;
                     cnt <= 0;
                     en <= 1;
                     rcvd <= 0;
                     cycl <= 1;
                     odata <= 1;
+                    COMMAND <= 1;
                 end
             end
             else begin              // Normal mode(Receive data bit)
                 if ((cnt > 1500) && ~rcvd) begin
-                    mem[bitcnt] <= port;
-                    bitcnt <= bitcnt + 1;
+                    mem[bitcnt] = port;
+                    bitcnt = bitcnt + 1;
+                    if (~bitcnt) COMMAND <= 1;
                     rcvd <= 1;
                 end
                 if (cnt > 4500) begin
