@@ -1,101 +1,110 @@
 `timescale 1 ns / 1 ps
 module env_slave;
-    wire en;    // Pullup emulation wire
     wire port;  
-    
-    wire [7:0] master_mem;  // Master registry for received package
-    wire [31:0] master_cnt; // Master counter
-    wire master_init;       // Master init flag
-    wire master_cycl;       // Master cycl flag
-    wire master_rcvd;       // Master received flag
-    wire master_idata;
-       
+    wire [7:0] MASTER_FLAGBYTE;
+	wire M_IDATA;
+	
     reg reset = 0; // Master will RESET when reset signal rise
     reg clk = 1;
     
-    reg en_slv = 1;         // Slave enable flag(1 when listening)
-    reg [31:0] cnt = 0;                                          // Internal counter
-    reg [2:0] bitcnt = 0;
-    reg [7:0] mem = 8'b10101010;//_11111111_00000000_11001100;   // Data dword for transfer
-    reg [7:0] cmnd_mem = 0;     // Command registry
+    reg [7:0]  FLAGBYTE = 8'b1100_0000; // 7-EN, 6-CYCL, 5-COM, 4-INIT, 3-PRES, 2-RCVD, 1-TRNS, 0-LAST
+	reg [31:0] COUNTER  = 0;
+    reg [7:0]  CMD_BYTE = 0;
+	reg [15:0] RC_DWORD = 0;
+	reg [3:0]  OUT_CNT  = 0;
+	reg [2:0]  IN_CNT   = 0;
+	reg odata = 0;
+	reg idata = 0;
+	
+    master lord(port, clk, reset, MASTER_FLAGBYTE, M_IDATA);
     
-    reg odata = 1;  // Data for transfer
-    reg idata;      // Data for receive
-    reg pres = 0;   // Presence flag(1 when master RESET)
-    reg trsm = 1;   // Transmition flag(0 when data bit transfered)
-    reg rcvd = 0;   // Received flag(0 when data bit received)
-    reg cycl = 1;   // 
-    reg READ = 0;   // READ command 
-    reg nullc = 1;  // NULL cnt
-    reg COMMAND = 0;// COMMAND flag
-    reg [7:0] COMMAND_BYTE = 8'b00000000; // Registry for received master command 
-    reg [2:0] COMMAND_BYTE_CNT = 3'b000;
-     
-    master lord(en, port, clk, reset, master_mem, master_init, master_cnt, master_cycl, master_rcvd, master_idata);
-    
-    assign port = en_slv ? 1'bz : odata;
+    assign port = FLAGBYTE[7] ? 1'bz : odata;
     
     always #5 clk = ~clk;
     
     always@(posedge clk) begin
-        /*if (nullc) begin
-            cnt <= 0;
-            nullc <= 0;
-        end*/
-        cnt <= cnt + 1;
-        if (en_slv) begin
-            if (~port) begin
-                if (cnt > 12000) begin 
-                    cycl <= 1;
-                    pres <= 1;
+        COUNTER <= COUNTER + 1;
+        if (FLAGBYTE[7]) begin
+            case (FLAGBYTE)
+                8'b1100_0000 : begin
+                    if (port) COUNTER <= 0;
+                    else FLAGBYTE[6] <= 0;
                 end
-                else if (cycl) cycl <= 0;
-            end
-            else begin
-                cnt <= 0;
-                if (~cycl) begin
-                    if (~COMMAND)
-                        en_slv <= 0;
-                end
-                else begin
-                    if (cnt > 6000) begin
-                        cnt <= 0;
-                        cycl <= 1;
+                8'b1000_0000 : begin
+                    if (port) begin
+                        FLAGBYTE[1] <= 1;
+                        FLAGBYTE[7] <= 0;
                     end
                     else begin
-                        if ((cnt > 3000) && rcvd) begin
-                            COMMAND_BYTE[COMMAND_BYTE_CNT] = port;
-                            COMMAND_BYTE_CNT = COMMAND_BYTE_CNT + 1;
-                            if (COMMAND_BYTE_CNT == 0) COMMAND <= 0;
-                            rcvd <= 0;
+                        if (COUNTER > 40000) begin
+                            FLAGBYTE[4] <= 1;
                         end
                     end
                 end
-            end
+                8'b1001_0000 : begin
+                    if (port) begin
+                        FLAGBYTE[6] <= 1;
+                        FLAGBYTE[4] <= 0;
+                        FLAGBYTE[3] <= 1;
+                    end
+                end
+                8'b1100_1000 : begin
+                    if (port) COUNTER <= 0;
+                    else begin
+                        FLAGBYTE[7] <= 0;
+                        FLAGBYTE[6] <= 0;
+                    end
+                end
+                8'b1110_0000 : begin
+                    if (port) COUNTER <= 0;
+                    else begin
+                        FLAGBYTE[6] <= 0;
+                        FLAGBYTE[2] <= 1;
+                    end
+                end
+                8'b1010_0100 : begin
+                    if (COUNTER < 6000) begin
+                        if (COUNTER == 2000) begin
+                            idata <= port;
+                        end
+                    end
+                    else begin
+                        CMD_BYTE[IN_CNT] <= idata;
+                        IN_CNT <= IN_CNT + 1;
+                        FLAGBYTE[2] <= 0;
+                        FLAGBYTE[6] <= 0;
+                    end
+                end
+            endcase
         end
         else begin
-            cycl <= 1;
-            if (cnt < 4500) begin
-                if (pres) begin
-                    odata <= 0;
-                    COMMAND <= 1;
+            case (FLAGBYTE)
+                8'b0000_0010 : begin
+                    if (COUNTER < 6000) begin
+                        odata <= RC_DWORD[OUT_CNT];
+                    end
+                    else begin
+                        FLAGBYTE[7] <= 1;
+                        FLAGBYTE[6] <= 1;
+                        FLAGBYTE[1] <= 0;
+                    end
                 end
-                else if (trsm) begin
-                    trsm <= 0;
-                    odata = mem[bitcnt];
-                    bitcnt = bitcnt + 1;
+                8'b0000_1000 : begin
+                    if (COUNTER < 4000) begin
+                        odata <= 0;
+                    end
+                    else begin
+                        FLAGBYTE[7] <= 1;
+                        FLAGBYTE[6] <= 1;
+                        FLAGBYTE[5] <= 1;
+                        FLAGBYTE[3] <= 0;
+                    end
                 end
-            end
-            else begin
-                pres <= 0;
-                en_slv <= 1;
-                trsm <= 1;
-                cnt <= 0;
-            end
+            endcase
         end
     end  
     initial begin
-        cnt <= 0;
+        COUNTER <= 0;
         reset = 1;
         #5 reset = 0;    
     end

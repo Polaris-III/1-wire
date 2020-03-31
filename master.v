@@ -1,114 +1,138 @@
 
-module master(output reg en, inout port, input clk, reset, output reg [7:0] mem, output reg init, output reg [31:0] cnt, output reg cycl, output reg rcvd, output reg idata);
-    //output reg [9:0] cnt = 0;// Time counter
-    //reg [31:0] mem = 0;      // Registry for received package
-    //reg init = 0;            // Init flag(1 when no slave)
-    reg [7:0] COMMAND_BYTE;      // Command registry for transfer
-    reg [2:0] bitcnt = 0;   // Bit counter
-    reg odata = 1;          // Data bit for transfer 
-    //reg idata = 1;          // Data bit for receive
-    //reg rcvd = 0;           // Receive flag(1 when bit received)
-    //reg cycl = 1;           // Time package flag(1 for pullup)
-    reg pres = 1;           // Presence flag(1 when no slave)
-    reg READ = 0;           // READ command transfered(1 for reading)
-    reg COMMAND = 0;        // COMMAND flag(1 for writing)
-    reg trsd = 1;      // Transfered flag()
-    //reg [2:0] COMMAND_BYTE_CNT = 3'b000;
-     
-    assign port = en ? odata : 1'bz;
+ module master(inout port, input clk, reset, output reg [7:0] FLAGBYTE, output reg idata);
+	reg [15:0] RC_DWORD = 0;			//	FLAGBYTE legend
+	reg [7:0]  CMD_BYTE = 8'b11001100;			//	7 EN
+	reg [31:0] COUNTER  = 0;			//	6 CYCL
+    //reg [7:0]  FLAGBYTE = 8'b11111000;//	5 COMMAND
+	reg [3:0]  IN_CNT   = 0;			//	4 INIT
+	reg [2:0]  OUT_CNT  = 0;			//	3 PRESENCE
+	reg odata;							//	2 RECEIVED
+	//reg idata;							//	1 TRANSMITTED
+										//	0 <RESERVED>
+
+    assign port = FLAGBYTE[7] ? odata : 1'bz;
     
     always@(posedge reset) begin
-        en <= 1;
-        cnt <= 0;
-        rcvd <= 0;
-        init <= 1;
-        pres <= 1;
-        idata <= 1;
-        cycl <= 1;
-        trsd <= 1;
-        bitcnt <= 0;
-        COMMAND <= 0;
-        COMMAND_BYTE <= 8'b00110011;
+        FLAGBYTE <= 8'b1111_0000;
+		COUNTER <= 0;
+		OUT_CNT <= 0;
+		IN_CNT <= 0;
+		odata <= 0;
+		idata <= 1;
     end
    
     always@(posedge clk) begin
-        cnt <= cnt + 1;
-        if (en) begin               // Transmit
-            rcvd <= 0;
-            if (cycl) begin         // Space between cycles
-                odata <= 1;
-                if (cnt > 2000) begin 
-                    cycl <= 0;
-                    trsd <= 1;
-                    odata <= 0;
-                    cnt <= 0;
-                end
-            end
-            else if (init) begin     // RESET
-                odata <= 0;
-                if (cnt > 48000) begin
-                    cnt <= 0;
-                    cycl <= 1;
-                    init <= 0;
-                    odata <= 1;
-                end
-            end
-            else begin              // Normal mode(Receive/Transmit data bit)
-                if (cnt > 6000) begin
-                    cycl <= 1;
-                    cnt <= 0;
-                end
-                else begin 
-                    if (cnt < 1500) odata <= 0;
-                    else if (~COMMAND) begin
-                        odata <= 1;
-                        en <= 0;
-                        cnt <= 0;
-                    end
-                    else begin
-                        if (trsd) begin
-                            odata = COMMAND_BYTE[bitcnt];
-                            bitcnt = bitcnt + 1;
-                            trsd <= 0;
-                            //if (bitcnt == 0) COMMAND = 0;
-                        end
-                    end
-                end
-            end
-        end 
-        else begin                  // Receive
-            if (pres) begin         // PRESENCE after RESET
-                if ((cnt > 4000) && ~rcvd) begin
-                    idata <= port;
-                    rcvd <= 1;
-                end
-                if (cnt > 4500) begin
-                    if (port == 0) begin
-                        pres <= 0;
-                    end
-                    else init <= 1;
-                    cnt <= 0;
-                    en <= 1;
-                    rcvd <= 0;
-                    cycl <= 1;
-                    odata <= 1;
-                    COMMAND <= 1;
-                end
-            end
-            else begin              // Normal mode(Receive data bit)
-                if ((cnt > 1500) && ~rcvd) begin
-                    mem[bitcnt] = port;
-                    bitcnt = bitcnt + 1;
-                    if (~bitcnt) COMMAND <= 1;
-                    rcvd <= 1;
-                end
-                if (cnt > 4500) begin
-                    en <= 1;
-                    cnt <= 0;
-                    cycl <= 1;
-                    odata <= 1;
-                end
-            end
-        end
+        COUNTER <= COUNTER + 1;
+		if (FLAGBYTE[7]) begin
+			case (FLAGBYTE)
+				8'b1111_0000 : begin			// Cycl, reset
+					if (COUNTER < 100) begin
+						odata <= 1;
+					end
+					else begin
+						COUNTER <= 0;
+						FLAGBYTE[6] <= 0;
+						odata <= 0;
+					end
+				end
+				8'b1011_0000 : begin			// Cycl ended, reset
+					if (COUNTER < 48000) odata <= 0;
+					else begin
+						FLAGBYTE[6] <= 1;
+						FLAGBYTE[3] <= 1;
+						COUNTER <= 0;
+					end
+				end
+				8'b1111_1000 : begin			// Cycl after reset
+					if (COUNTER < 100) begin
+						odata <= 1;
+					end
+					else begin
+					    FLAGBYTE[2] <= 1;
+					    FLAGBYTE[4] <= 0;
+					    FLAGBYTE[5] <= 0;
+						FLAGBYTE[6] <= 0;
+						FLAGBYTE[7] <= 0;
+						COUNTER <= 0;
+						odata <= 0;
+					end
+				end
+				8'b1110_0000 : begin            // Normal cycl before transmitting
+				    if (COUNTER < 100) begin
+						odata <= 1;
+					end
+					else FLAGBYTE[6] <= 0;
+				end
+				8'b1010_0000 : begin			// Fall before transmitting
+					if (COUNTER < 1500) odata <= 0;
+					else begin
+						FLAGBYTE[1] <= 1;
+						COUNTER <= 0;
+					end
+				end
+				8'b1010_0010 : begin			// Transmit after cycl
+					if (COUNTER < 4500) odata <= CMD_BYTE[OUT_CNT];
+					else begin
+						OUT_CNT = OUT_CNT + 1;
+						FLAGBYTE[1] <= 0;
+						FLAGBYTE[6] <= 1;
+						COUNTER <= 0;
+						if (OUT_CNT == 0) begin
+						    FLAGBYTE[5] <= 0;
+						    //FLAGBYTE[3] <= 0;
+						end
+					end
+				end
+				8'b1100_0000 : begin            // Cycl before receiving
+				    if (COUNTER < 100) begin
+						odata <= 1;
+					end
+					else FLAGBYTE[6] <= 0;
+				end
+				8'b1000_0000 : begin			// Fall before receiving
+					if (COUNTER < 1500) odata <= 0;
+					else begin
+						odata <= 1;
+						COUNTER <= 0;
+						FLAGBYTE[7] <= 0;
+						FLAGBYTE[2] <= 1;
+					end
+				end
+				8'b1111_1111 : begin
+					COUNTER <= 0;
+				end
+				default : FLAGBYTE <= 8'b1111_1000;
+			endcase
+		end
+		else begin
+			case (FLAGBYTE)
+				8'b0000_0100 : begin			// Receiving		
+					if (COUNTER < 4500) idata <= port;
+					else begin
+						FLAGBYTE[2] <= 1; 
+						FLAGBYTE[6] <= 1;
+						COUNTER <= 0;
+						RC_DWORD[IN_CNT] <= idata;
+						IN_CNT = IN_CNT + 1;
+						if (IN_CNT == 0) FLAGBYTE <= 8'b1111_1111;
+					end
+				end
+				8'b0000_1100 : begin			// PRESENCE searching
+					if (COUNTER > 4000) begin
+						FLAGBYTE[7] <= 1;
+						FLAGBYTE[6] <= 1;
+						if (~idata) begin
+						    FLAGBYTE[3] <= 0;
+						    FLAGBYTE[5] <= 1;
+						end
+						FLAGBYTE[2] <= 0;
+						COUNTER <= 0;
+					end
+					else if (COUNTER == 2000) begin
+					   idata <= port;
+					end
+				end
+			endcase
+		end
     end
 endmodule
