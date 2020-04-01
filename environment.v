@@ -25,88 +25,117 @@ module env_slave;
     always@(posedge clk) begin
         COUNTER <= COUNTER + 1;
         if (FLAGBYTE[7]) begin
-            case (FLAGBYTE)
-                8'b1100_0000 : begin
-                    if (port) COUNTER <= 0;
-                    else FLAGBYTE[6] <= 0;
+            if (FLAGBYTE[6]) begin
+                if (port) begin
+                    if (COUNTER > 1000) begin
+                        FLAGBYTE[5] <= 0;
+                    end 
                 end
-                8'b1000_0000 : begin
-                    if (port) begin
-                        FLAGBYTE[1] <= 1;
-                        FLAGBYTE[7] <= 0;
-                    end
-                    else begin
-                        if (COUNTER > 40000) begin
-                            FLAGBYTE[4] <= 1;
-                        end
-                    end
+                else begin
+                    COUNTER <= 0;
+                    FLAGBYTE[6] <= 0;
                 end
-                8'b1001_0000 : begin
-                    if (port) begin
+            end
+            else begin
+                if (port) begin
+                    if (COUNTER > 40000) begin
+                        COUNTER <= 0;
+                        CMD_BYTE <= 0;
+                        OUT_CNT <= 0;
+                        IN_CNT <= 0;
                         FLAGBYTE[6] <= 1;
-                        FLAGBYTE[4] <= 0;
-                        FLAGBYTE[3] <= 1;
+                        FLAGBYTE[4] <= 1;
                     end
-                end
-                8'b1100_1000 : begin
-                    if (port) COUNTER <= 0;
                     else begin
-                        FLAGBYTE[7] <= 0;
-                        FLAGBYTE[6] <= 0;
-                    end
-                end
-                8'b1110_0000 : begin
-                    if (port) COUNTER <= 0;
-                    else begin
-                        FLAGBYTE[6] <= 0;
-                        FLAGBYTE[2] <= 1;
-                    end
-                end
-                8'b1010_0100 : begin
-                    if (COUNTER < 6000) begin
-                        if (COUNTER == 2000) begin
-                            idata <= port;
+                        if (FLAGBYTE[5]) begin
+                            if (COUNTER < 6000) begin
+                                if (COUNTER == 4000) idata <= port;
+                                if (COUNTER == 4050) begin
+                                    CMD_BYTE[IN_CNT] <= idata;
+                                    IN_CNT = IN_CNT + 1;
+                                end
+                            end
+                            else begin
+                                if (IN_CNT == 0) begin
+                                    if (CMD_BYTE == 8'h44) begin
+                                        FLAGBYTE[5] <= 1;
+                                        RC_DWORD <= 16'hABCD;    
+                                    end
+                                    if (CMD_BYTE == 8'hBE) begin 
+                                        FLAGBYTE[5] <= 0; 
+                                    end
+                                end
+                                FLAGBYTE[6] <= 1;
+                                COUNTER <= 0;
+                            end
+                        end
+                        else begin
+                            FLAGBYTE[7] <= 0;
+                            COUNTER <= 0;
                         end
                     end
-                    else begin
-                        CMD_BYTE[IN_CNT] <= idata;
-                        IN_CNT <= IN_CNT + 1;
-                        FLAGBYTE[2] <= 0;
-                        FLAGBYTE[6] <= 0;
+                end
+                else begin
+                    if (FLAGBYTE[4]) FLAGBYTE[7] <= 0;
+                    if (FLAGBYTE[5]) begin
+                         if (COUNTER < 6000) begin
+                            if (COUNTER == 4000) idata <= port;
+                            if (COUNTER == 4050) begin
+                                CMD_BYTE[IN_CNT] <= idata;
+                                IN_CNT = IN_CNT + 1;
+                            end
+                        end
+                        else begin
+                           if (IN_CNT == 0) begin
+                                if (CMD_BYTE == 8'h44) begin
+                                    FLAGBYTE[5] <= 1;
+                                    RC_DWORD <= 16'hABCD;    
+                                end
+                                if (CMD_BYTE == 8'hBE) begin 
+                                    FLAGBYTE[5] <= 0;
+                                end
+                            end
+                            FLAGBYTE[6] <= 1;
+                            COUNTER <= 0;
+                        end
                     end
                 end
-            endcase
+            end
         end
         else begin
-            case (FLAGBYTE)
-                8'b0000_0010 : begin
-                    if (COUNTER < 6000) begin
+            if (FLAGBYTE[4] == 1) begin
+                if (COUNTER < 6000) begin
+                    odata <= 0;
+                end
+                else begin
+                    FLAGBYTE[4] <= 0;
+                    FLAGBYTE[5] <= 1;
+                    FLAGBYTE[6] <= 1;
+                    FLAGBYTE[7] <= 1;
+                    COUNTER <= 0;
+                end
+            end
+            else begin
+                if (~FLAGBYTE[5]) begin
+                    if (COUNTER < 4500) begin
                         odata <= RC_DWORD[OUT_CNT];
                     end
                     else begin
                         FLAGBYTE[7] <= 1;
                         FLAGBYTE[6] <= 1;
-                        FLAGBYTE[1] <= 0;
+                        COUNTER <= 0;
+                        OUT_CNT <= OUT_CNT + 1;
                     end
                 end
-                8'b0000_1000 : begin
-                    if (COUNTER < 4000) begin
-                        odata <= 0;
-                    end
-                    else begin
-                        FLAGBYTE[7] <= 1;
-                        FLAGBYTE[6] <= 1;
-                        FLAGBYTE[5] <= 1;
-                        FLAGBYTE[3] <= 0;
-                    end
-                end
-            endcase
+            end
         end
     end  
     initial begin
         COUNTER <= 0;
         reset = 1;
-        #5 reset = 0;    
+        #5 reset = 0;  
+        #4_000_000 reset = 1;
+        #5 reset = 0;
     end
 
 endmodule

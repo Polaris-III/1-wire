@@ -9,13 +9,15 @@
 	reg odata;							//	2 RECEIVED
 	//reg idata;						//	1 TRANSMITTED
 										//	0 <RESERVED>
-    reg [2:0] CMD_SEL = 111;            //  COMMAND SELECTOR
+    reg [2:0] CMD_SEL = 3'b111;         //  COMMAND SELECTOR
                                         //  111 44h
                                         //  110 BEh
+                                        //  100 <no command>
     assign port = FLAGBYTE[7] ? odata : 1'bz;
     
     always@(posedge reset) begin
         FLAGBYTE <= 8'b1111_0000;
+        CMD_SEL <= 3'b111;
 		COUNTER <= 0;
 		OUT_CNT <= 0;
 		IN_CNT <= 0;
@@ -53,8 +55,9 @@
 					end
 				end
 				8'b1100_0000 : begin            // Cycl before receiving
-				    if (COUNTER < 100) begin
+				    if (COUNTER < 101) begin
 						odata <= 1;
+						if (COUNTER == 100) odata <= 0;
 					end
 					else FLAGBYTE[6] <= 0;
 				end
@@ -80,7 +83,10 @@
 					end
 				end
 				8'b1000_0000 : begin			// Fall before receiving
-					if (COUNTER < 1500) odata <= 0;
+					if (COUNTER < 1501) begin
+					   odata <= 0;
+					   if (COUNTER == 1500) odata <= 1;
+					end
 					else begin
 						odata <= 1;
 						COUNTER <= 0;
@@ -109,6 +115,7 @@
 					end
 				end
 				8'b1111_1111 : begin
+				    odata <= 1;
 					COUNTER <= 0;
 				end
 				default : FLAGBYTE <= 8'b1111_1000;
@@ -125,7 +132,10 @@
 						COUNTER <= 0;
 						RC_DWORD[IN_CNT] <= idata;
 						IN_CNT = IN_CNT + 1;
-						if (IN_CNT == 0) FLAGBYTE <= 8'b1111_1111;
+						if (IN_CNT == 0) begin 
+						    FLAGBYTE <= 8'b1111_0000;
+						    CMD_SEL <= 3'b100;
+						end
 					end
 				end
 				8'b0000_1100 : begin			// PRESENCE searching
@@ -139,6 +149,7 @@
 						FLAGBYTE[3] <= 0;
 						FLAGBYTE[2] <= 0;
 						COUNTER <= 0;
+						if (CMD_SEL == 3'b100) FLAGBYTE <= 8'b1111_1111;
 					end
 					else if (COUNTER == 2000) begin
 					   idata <= port;
