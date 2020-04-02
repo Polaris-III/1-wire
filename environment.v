@@ -1,8 +1,9 @@
 `timescale 1 ns / 1 ps
 module env_slave;
     wire port;  
-    wire [7:0] M_FLAGBYTE;
-    wire [15:0] M_DWORD;
+    //wire [7:0] M_FLAGBYTE;
+    //wire [15:0] M_DWORD;
+	wire [8:0] TEMP;
 	
     reg reset = 0; // Master will RESET when reset signal rise
     reg clk = 1;
@@ -13,10 +14,11 @@ module env_slave;
 	reg [15:0] RC_DWORD = 0;
 	reg [3:0]  OUT_CNT  = 0;
 	reg [2:0]  IN_CNT   = 0;
+	reg temp_switcher = 0;
 	reg odata = 0;
 	reg idata = 0;
 	
-    master lord(port, clk, reset, M_FLAGBYTE, M_DWORD);
+    master lord(port, clk, reset, /*M_FLAGBYTE, M_DWORD, */TEMP);
     
     assign port = FLAGBYTE[7] ? 1'bz : odata;
     
@@ -59,7 +61,9 @@ module env_slave;
                                 if (IN_CNT == 0) begin
                                     if (CMD_BYTE == 8'h44) begin
                                         FLAGBYTE[5] <= 1;
-                                        RC_DWORD <= 16'hFFCE;    
+                                        temp_switcher <= temp_switcher + 1;
+                                        if (temp_switcher) RC_DWORD <= 16'hFFCE;
+                                        else     RC_DWORD <= 16'h32;
                                     end
                                     if (CMD_BYTE == 8'hBE) begin 
                                         FLAGBYTE[5] <= 0; 

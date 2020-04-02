@@ -1,9 +1,9 @@
 
- module master(inout port, input clk, reset, output reg [7:0] FLAGBYTE, output reg [15:0] RC_DWORD);
-	//reg [15:0] RC_DWORD = 0;			//	FLAGBYTE legend
+ module master(inout port, input clk, reset, /*output reg [7:0] FLAGBYTE, output reg [15:0] RC_DWORD = 0, */output reg [8:0] TEMP = 0);
+	reg [15:0] RC_DWORD = 0;			//	FLAGBYTE legend
 	reg [7:0]  CMD_BYTE = 8'h44;	    //	7 EN
 	reg [31:0] COUNTER  = 0;			//	6 CYCL
-    //reg [7:0]  FLAGBYTE = 8'b11111000;//	5 COMMAND
+    reg [7:0]  FLAGBYTE = 8'b11111000;//	5 COMMAND
 	reg [3:0]  IN_CNT   = 0;			//	4 INIT
 	reg [2:0]  OUT_CNT  = 0;			//	3 <RESERVED>
 	reg odata;							//	2 RECEIVED
@@ -12,13 +12,11 @@
     reg [2:0] CMD_SEL = 3'b111;         //  COMMAND SELECTOR
                                         //  111 44h
                                         //  110 BEh
-                                        //  101 Transmit to another module
                                         //  100 <no command>
     assign port = FLAGBYTE[7] ? odata : 1'bz;
     
     always@(posedge reset) begin
         FLAGBYTE <= 8'b1111_0000;
-        RC_DWORD <= 0;
         CMD_SEL <= 3'b111;
 		COUNTER <= 0;
 		OUT_CNT <= 0;
@@ -136,6 +134,7 @@
 						if (IN_CNT == 0) begin 
 						    FLAGBYTE <= 8'b1111_0000;
 						    CMD_SEL <= 3'b100;
+						    TEMP[8:0] <= RC_DWORD[8:0];
 						end
 					end
 				end
